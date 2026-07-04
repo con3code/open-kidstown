@@ -1,0 +1,21 @@
+{
+  "name": "open-kidstown",
+  "private": true,
+  "version": "1.0.0",
+  "description": "キッズタウン: 子どもが町を運営して社会体験する活動のためのアプリ一式 (Web管理アプリ4本 + Xcratch窓口アプリ)",
+  "workspaces": [
+    "shared",
+    "citizen-db",
+    "shop-pos",
+    "kids-bank",
+    "kt-sys"
+  ],
+  "scripts": {
+    "build": "npm run build -w citizen-db && npm run build -w shop-pos && npm run build -w kids-bank && npm run build -w kt-sys",
+    "test": "npm run test -w shared",
+    "dev:citizen-db": "npm run dev -w citizen-db",
+    "dev:shop-pos": "npm run dev -w shop-pos",
+    "dev:kids-bank": "npm run dev -w kids-bank",
+    "dev:kt-sys": "npm run dev -w kt-sys"
+  }
+}

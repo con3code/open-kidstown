@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.DS_Store
+.firebase/
+firebase-debug.log
+*.local
+
+# 各利用者のデプロイ先設定 (.firebaserc.example を参照)
+.firebaserc
+
+# ローカル専用
+.claude/

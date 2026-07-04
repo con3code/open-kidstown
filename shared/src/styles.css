@@ -1,0 +1,181 @@
+/* キッズタウン管理アプリ 共通スタイル */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+    font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", Meiryo, system-ui, sans-serif;
+    background: #f4f6f8;
+    color: #1a202c;
+    font-size: 14px;
+}
+h1, h2, h3 { margin: 0; }
+button { font-family: inherit; }
+
+/* --- master key gate --- */
+.kt-gate {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+.kt-gate-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.12);
+    padding: 32px;
+    width: 100%;
+    max-width: 380px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    text-align: center;
+}
+.kt-gate-card h1 { font-size: 22px; }
+.kt-gate-card p { margin: 0; color: #4a5568; }
+.kt-gate-card input {
+    font-size: 16px;
+    padding: 10px 12px;
+    border: 1px solid #cbd5e0;
+    border-radius: 8px;
+}
+.kt-gate-card button {
+    font-size: 16px;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    background: #2b6cb0;
+    color: #fff;
+    cursor: pointer;
+}
+.kt-gate-card button:disabled { background: #a0aec0; cursor: default; }
+.kt-error, .kt-gate-card p.kt-error { color: #c53030; margin: 0; }
+
+/* --- shell --- */
+.kt-shell { min-height: 100vh; display: flex; flex-direction: column; }
+.kt-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    color: #fff;
+    flex-wrap: wrap;
+}
+.kt-header h1 { font-size: 18px; }
+.kt-project {
+    font-size: 12px;
+    background: rgba(255,255,255,.2);
+    border-radius: 999px;
+    padding: 2px 10px;
+}
+.kt-header-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.kt-main { flex: 1; padding: 16px; max-width: 1200px; width: 100%; margin: 0 auto; }
+
+/* --- buttons / forms --- */
+.kt-btn {
+    padding: 7px 14px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e0;
+    background: #fff;
+    color: #1a202c;
+    cursor: pointer;
+    font-size: 13px;
+}
+.kt-btn:hover { background: #edf2f7; }
+.kt-btn-primary { background: #2b6cb0; border-color: #2b6cb0; color: #fff; }
+.kt-btn-primary:hover { background: #2c5282; }
+.kt-btn-danger { background: #fff5f5; border-color: #fc8181; color: #c53030; }
+.kt-btn-danger:hover { background: #fed7d7; }
+.kt-btn-ghost { background: transparent; border-color: rgba(255,255,255,.5); color: #fff; }
+.kt-btn-ghost:hover { background: rgba(255,255,255,.15); }
+.kt-btn:disabled { opacity: .5; cursor: default; }
+
+.kt-toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+.kt-toolbar input[type="text"], .kt-toolbar input[type="search"], .kt-toolbar select {
+    padding: 7px 10px;
+    border: 1px solid #cbd5e0;
+    border-radius: 8px;
+    font-size: 13px;
+}
+.kt-toolbar .kt-spacer { flex: 1; }
+
+.kt-form { display: flex; flex-direction: column; gap: 10px; }
+.kt-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #4a5568; }
+.kt-form input, .kt-form select, .kt-form textarea {
+    padding: 8px 10px;
+    border: 1px solid #cbd5e0;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+}
+.kt-form .kt-inline { flex-direction: row; align-items: center; gap: 8px; }
+.kt-hint { font-size: 12px; color: #718096; margin: 0; }
+.kt-mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+/* --- table --- */
+.kt-table-wrap { overflow-x: auto; background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.kt-table { border-collapse: collapse; width: 100%; }
+.kt-table th, .kt-table td { padding: 8px 12px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+.kt-table th { background: #f7fafc; font-size: 12px; color: #4a5568; user-select: none; position: sticky; top: 0; }
+.kt-table td { font-size: 13px; }
+.kt-row-clickable { cursor: pointer; }
+.kt-row-clickable:hover { background: #ebf8ff; }
+.kt-empty { text-align: center; color: #a0aec0; padding: 24px !important; }
+
+.kt-badge { border-radius: 999px; padding: 2px 10px; font-size: 12px; display: inline-block; }
+.kt-badge-green { background: #c6f6d5; color: #22543d; }
+.kt-badge-gray { background: #e2e8f0; color: #4a5568; }
+.kt-badge-red { background: #fed7d7; color: #822727; }
+.kt-badge-blue { background: #bee3f8; color: #2a4365; }
+
+/* --- modal --- */
+.kt-modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.45);
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px; z-index: 100;
+}
+.kt-modal {
+    background: #fff; border-radius: 12px;
+    width: 100%; max-width: 560px; max-height: 90vh;
+    display: flex; flex-direction: column;
+    box-shadow: 0 10px 40px rgba(0,0,0,.25);
+}
+.kt-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid #e2e8f0; }
+.kt-modal-head h2 { font-size: 16px; }
+.kt-modal-head .kt-btn-ghost { color: #4a5568; border-color: transparent; }
+.kt-modal-body { padding: 18px; overflow-y: auto; }
+.kt-modal-foot { padding: 12px 18px; border-top: 1px solid #e2e8f0; display: flex; gap: 8px; justify-content: flex-end; }
+
+/* --- toast --- */
+.kt-toasts { position: fixed; bottom: 16px; right: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 200; }
+.kt-toast {
+    padding: 10px 16px; border-radius: 8px; color: #fff;
+    box-shadow: 0 4px 12px rgba(0,0,0,.2); max-width: 360px; font-size: 13px;
+}
+.kt-toast-info { background: #2b6cb0; }
+.kt-toast-success { background: #2f855a; }
+.kt-toast-error { background: #c53030; }
+
+/* --- misc --- */
+.kt-section { margin-bottom: 24px; }
+.kt-section h2 { font-size: 16px; margin-bottom: 10px; }
+.kt-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.kt-card {
+    background: #fff; border-radius: 10px; padding: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08); cursor: pointer;
+    border: 2px solid transparent;
+}
+.kt-card:hover { border-color: #2b6cb0; }
+.kt-card h3 { font-size: 15px; margin-bottom: 4px; }
+.kt-card p { margin: 0; font-size: 12px; color: #718096; }
+
+@media (max-width: 640px) {
+    .kt-main { padding: 10px; }
+    .kt-table th, .kt-table td { padding: 6px 8px; }
+}
