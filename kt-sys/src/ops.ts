@@ -9,6 +9,9 @@ import {
     type CitizenProfile, type ShopProfile
 } from '@kidstown/shared';
 
+export const DUMP_FORMAT = 'kidstown-town-dump';
+export const DUMP_VERSION = 1;
+
 export type Progress = (message: string) => void;
 
 // ---------------------------------------------------------------- 統計
@@ -193,6 +196,124 @@ export async function resetShopTx(
 export interface FullResetResult {
     cards: number;
     banks: number;
+}
+
+// ---------------------------------------------------------------- JSON 書き出し / 読み込み
+
+/**
+ * タウンダンプ形式 (ポータビリティ用)。
+ * ドキュメント ID・bank_key・card_key は BANK/CARD 文字列のみから決まり
+ * マスターキーに依存しないため、読み込み時に master_key フィールドを
+ * 接続中のタウンのものへ書き換えるだけで、同一タウンへの復元も
+ * 別マスターキー (新タウン) への移行も成立する。
+ */
+export interface TownDumpCard {
+    id: string;
+    number: unknown;
+    bank_key: string;
+    card_key: string;
+    time_stamp: number;
+}
+
+export interface TownDumpBank {
+    id: string;
+    bank_name: string;
+    time_stamp: number;
+}
+
+export interface TownDump {
+    format: typeof DUMP_FORMAT;
+    version: typeof DUMP_VERSION;
+    exportedAt: string; // YYYYMMDDHHMMSS
+    cards: TownDumpCard[];
+    banks: TownDumpBank[];
+}
+
+/** タウン全体を JSON ダンプにする (このマスターキーの全 card + 参照される bank) */
+export async function exportTown(client: NbClient): Promise<TownDump> {
+    const [cards, allBanks] = await Promise.all([
+        client.listCardsByMaster(),
+        client.listBanks('')
+    ]);
+    // bank ドキュメントの id は SHA256(bank_name) = card の bank_key と同じ値。
+    // 書き出す card が参照している bank だけを同梱する
+    const referenced = new Set(cards.map(c => c.bankKey));
+    const banks = allBanks.filter(b => referenced.has(b.docId));
+    return {
+        format: DUMP_FORMAT,
+        version: DUMP_VERSION,
+        exportedAt: tsNow(),
+        cards: cards.map(c => ({
+            id: c.docId, number: c.value,
+            bank_key: c.bankKey, card_key: c.cardKey, time_stamp: c.timeStamp
+        })),
+        banks: banks.map(b => ({id: b.docId, bank_name: b.name, time_stamp: b.timeStamp}))
+    };
+}
+
+/** ダンプファイルの検証つきパース。不正なら日本語メッセージの Error */
+export function parseTownDump(text: string): TownDump {
+    let obj: unknown;
+    try {
+        obj = JSON.parse(text);
+    } catch {
+        throw new Error('JSON として読めません');
+    }
+    const d = obj as TownDump;
+    if (d?.format !== DUMP_FORMAT) throw new Error('タウンダンプのファイルではありません');
+    if (d.version !== DUMP_VERSION) throw new Error(`未対応のバージョンです (${String(d.version)})`);
+    if (!Array.isArray(d.cards) || !Array.isArray(d.banks)) throw new Error('中身が壊れています');
+    for (const c of d.cards) {
+        if (typeof c?.id !== 'string' || typeof c?.bank_key !== 'string' || typeof c?.card_key !== 'string') {
+            throw new Error('card レコードが壊れています');
+        }
+    }
+    for (const b of d.banks) {
+        if (typeof b?.id !== 'string' || typeof b?.bank_name !== 'string') {
+            throw new Error('bank レコードが壊れています');
+        }
+    }
+    return d;
+}
+
+export interface ImportResult {
+    cards: number;
+    banks: number;
+    deleted?: FullResetResult;
+}
+
+/**
+ * タウンダンプの読み込み。
+ * clean=true なら先にタウン全体を削除 (クリーンリストア)。
+ * master_key は接続中のタウンのものへ書き換えて書き込む。
+ */
+export async function importTown(
+    client: NbClient,
+    dump: TownDump,
+    clean: boolean,
+    progress: Progress
+): Promise<ImportResult> {
+    let deleted: FullResetResult | undefined;
+    if (clean) {
+        deleted = await fullTownReset(client, progress);
+    }
+    progress(`bank ${dump.banks.length} 件を書き込み中…`);
+    await client.setDocs('bank', dump.banks.map(b => ({
+        id: b.id,
+        data: {bank_name: b.bank_name, time_stamp: b.time_stamp || Date.now()}
+    })));
+    progress(`card ${dump.cards.length} 件を書き込み中…`);
+    await client.setDocs('card', dump.cards.map(c => ({
+        id: c.id,
+        data: {
+            number: c.number as string | number,
+            bank_key: c.bank_key,
+            card_key: c.card_key,
+            master_key: client.masterKeySha256,
+            time_stamp: c.time_stamp || Date.now()
+        }
+    })));
+    return {cards: dump.cards.length, banks: dump.banks.length, deleted};
 }
 
 /**

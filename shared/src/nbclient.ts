@@ -16,6 +16,7 @@ export interface CardRow {
     docId: string;
     /** number フィールドの生値 (文字列 or 数値) */
     value: unknown;
+    bankKey: string;
     cardKey: string;
     timeStamp: number;
 }
@@ -112,6 +113,7 @@ export class NbClient {
             return {
                 docId: d.id,
                 value: data.number,
+                bankKey: String(data.bank_key ?? ''),
                 cardKey: String(data.card_key ?? ''),
                 timeStamp: toFiniteNumber(data.time_stamp, 0)
             };
@@ -133,6 +135,7 @@ export class NbClient {
             return {
                 docId: d.id,
                 value: data.number,
+                bankKey: String(data.bank_key ?? ''),
                 cardKey: String(data.card_key ?? ''),
                 timeStamp: toFiniteNumber(data.time_stamp, 0)
             };
@@ -144,7 +147,7 @@ export class NbClient {
      * bank ドキュメントには master_key がないため、kt.* プレフィックスで
      * 名前空間スコープの削除だけを行うこと。
      */
-    async listBanks(prefix: string): Promise<{docId: string; name: string}[]> {
+    async listBanks(prefix: string): Promise<{docId: string; name: string; timeStamp: number}[]> {
         const q = query(
             collection(this.db, 'bank'),
             orderBy('bank_name'),
@@ -153,8 +156,28 @@ export class NbClient {
         );
         const snap = await getDocs(q);
         return snap.docs
-            .map(d => ({docId: d.id, name: String(d.data().bank_name ?? '')}))
+            .map(d => ({
+                docId: d.id,
+                name: String(d.data().bank_name ?? ''),
+                timeStamp: toFiniteNumber(d.data().time_stamp, 0)
+            }))
             .filter(b => b.name.startsWith(prefix));
+    }
+
+    /**
+     * \u30c9\u30ad\u30e5\u30e1\u30f3\u30c8 id \u6307\u5b9a\u306e\u4e00\u62ec\u66f8\u304d\u8fbc\u307f (400 \u4ef6\u305a\u3064\u30d0\u30c3\u30c1)\u3002
+     * kt-sys \u306e\u30bf\u30a6\u30f3\u30c0\u30f3\u30d7\u8aad\u307f\u8fbc\u307f\u7528\u3002data \u306f\u30c9\u30ad\u30e5\u30e1\u30f3\u30c8\u5168\u4f53\u3092\u4e0a\u66f8\u304d\u3059\u308b\u3002
+     */
+    async setDocs(collectionName: 'card' | 'bank',
+                  docs: {id: string; data: Record<string, unknown>}[]): Promise<number> {
+        for (let i = 0; i < docs.length; i += 400) {
+            const batch = writeBatch(this.db);
+            for (const d of docs.slice(i, i + 400)) {
+                batch.set(doc(this.db, collectionName, d.id), d.data);
+            }
+            await batch.commit();
+        }
+        return docs.length;
     }
 
     /**

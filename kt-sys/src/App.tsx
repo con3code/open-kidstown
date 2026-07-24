@@ -1,8 +1,9 @@
 import {useCallback, useEffect, useState, type ReactNode} from 'react';
-import {AppShell, Modal, useToast, useTown} from '@kidstown/shared';
+import {AppShell, Modal, formatTs, tsNow, useToast, useTown} from '@kidstown/shared';
 import {
     gatherStats, listAccounts, purgeClaims, resetBalances, resetShopTx, fullTownReset,
-    type TownStats, type SysAccount, type Progress
+    exportTown, parseTownDump, importTown,
+    type TownStats, type SysAccount, type Progress, type TownDump
 } from './ops';
 
 type Dialog =
@@ -10,7 +11,18 @@ type Dialog =
     | {kind: 'balances'}
     | {kind: 'shop'; shopId: string}
     | {kind: 'full'}
+    | {kind: 'import'}
     | null;
+
+function downloadJson(filename: string, obj: unknown): void {
+    const blob = new Blob([JSON.stringify(obj)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 export function App(): ReactNode {
     const {client} = useTown();
@@ -110,6 +122,21 @@ export function App(): ReactNode {
                             <p>取引 {s.count} 件を削除し、取引番号を 1 からやり直します</p>
                         </div>
                     ))}
+                    <div className="kt-card" onClick={() => {
+                        if (busy) return;
+                        void run('JSON書き出し', async () => {
+                            const dump = await exportTown(client);
+                            downloadJson(`town-dump-${tsNow()}.json`, dump);
+                            return `card ${dump.cards.length} 件 / bank ${dump.banks.length} 件を書き出しました`;
+                        });
+                    }}>
+                        <h3>タウン全体をJSONで書き出し</h3>
+                        <p>全データ ({stats?.totalCards ?? '…'} 件) をファイルに保存。バックアップや別マスターキーへの引っ越しに</p>
+                    </div>
+                    <div className="kt-card" onClick={() => !busy && setDialog({kind: 'import'})}>
+                        <h3>JSONから読み込み</h3>
+                        <p>書き出したファイルを復元。接続中のタウンのデータとして書き込まれます (引っ越しにも使えます)</p>
+                    </div>
                     <div className="kt-card" style={{borderColor: '#fc8181'}} onClick={() => !busy && setDialog({kind: 'full'})}>
                         <h3 style={{color: '#c53030'}}>タウン全体リセット</h3>
                         <p>このマスターキーの全データ ({stats?.totalCards ?? '…'} 件) を消去して最初からやり直します</p>
@@ -170,6 +197,18 @@ export function App(): ReactNode {
                         (他店舗のデータ・番号には影響しません)。
                     </p>
                 </Modal>
+            )}
+
+            {dialog?.kind === 'import' && (
+                <ImportModal
+                    busy={busy} busyMsg={busyMsg}
+                    onClose={() => setDialog(null)}
+                    onRun={(dump, clean) => void run('JSON読み込み', async () => {
+                        const r = await importTown(client, dump, clean, progress);
+                        return `card ${r.cards} 件 / bank ${r.banks} 件を書き込みました` +
+                            (r.deleted ? ` (先に ${r.deleted.cards} 件を削除)` : '');
+                    })}
+                />
             )}
 
             {dialog?.kind === 'full' && stats && (
@@ -275,6 +314,95 @@ function ShopResetFooter({busy, busyMsg, onRun, onCancel}: ShopResetFooterProps)
                 {busy ? busyMsg : 'リセットする'}
             </button>
         </>
+    );
+}
+
+interface ImportModalProps {
+    busy: boolean;
+    busyMsg: string;
+    onClose: () => void;
+    onRun: (dump: TownDump, clean: boolean) => void;
+}
+
+function ImportModal({busy, busyMsg, onClose, onRun}: ImportModalProps): ReactNode {
+    const [dump, setDump] = useState<TownDump | null>(null);
+    const [fileError, setFileError] = useState('');
+    const [clean, setClean] = useState(false);
+    const [typed, setTyped] = useState('');
+
+    const onFile = async (file: File): Promise<void> => {
+        setDump(null);
+        setFileError('');
+        try {
+            setDump(parseTownDump(await file.text()));
+        } catch (err) {
+            setFileError(err instanceof Error ? err.message : '読み込みに失敗しました');
+        }
+    };
+
+    const ready = dump !== null && (!clean || typed === 'リセット');
+
+    return (
+        <Modal
+            title="JSONから読み込み"
+            onClose={onClose}
+            footer={
+                <>
+                    <button className="kt-btn" onClick={onClose} disabled={busy}>キャンセル</button>
+                    <button
+                        className="kt-btn kt-btn-danger" disabled={busy || !ready}
+                        onClick={() => dump && onRun(dump, clean)}
+                    >
+                        {busy ? busyMsg : dump ? `card ${dump.cards.length} 件を書き込む` : 'ファイルを選んでください'}
+                    </button>
+                </>
+            }
+        >
+            <div className="kt-form">
+                <p className="kt-hint">
+                    「タウン全体をJSONで書き出し」で保存したファイルを、<b>いま接続しているタウン</b>の
+                    データとして書き込みます (別のマスターキーで書き出したファイルでも OK =
+                    タウンの引っ越し)。実行前に窓口アプリを止めてください。
+                </p>
+                <label>
+                    ダンプファイル (.json)
+                    <input
+                        type="file" accept=".json,application/json" disabled={busy}
+                        onChange={e => {
+                            const f = e.target.files?.[0];
+                            e.target.value = '';
+                            if (f) void onFile(f);
+                        }}
+                    />
+                </label>
+                {fileError && <p style={{color: '#c53030', margin: 0}}>{fileError}</p>}
+                {dump && (
+                    <p className="kt-hint">
+                        書き出し日時: {formatTs(dump.exportedAt)} / card {dump.cards.length} 件 /
+                        bank {dump.banks.length} 件
+                    </p>
+                )}
+                <label className="kt-inline">
+                    <input
+                        type="checkbox" checked={clean} disabled={busy}
+                        onChange={e => setClean(e.target.checked)}
+                    />
+                    先にタウン全体を削除してから読み込む (クリーンリストア)
+                </label>
+                {!clean && (
+                    <p className="kt-hint">
+                        チェックしない場合はマージ: 同じデータは上書き、ファイルにないデータは残ります。
+                    </p>
+                )}
+                {clean && (
+                    <label>
+                        確認のため「リセット」と入力してください
+                        <input value={typed} disabled={busy} placeholder="リセット"
+                            onChange={e => setTyped(e.target.value)} />
+                    </label>
+                )}
+            </div>
+        </Modal>
     );
 }
 
