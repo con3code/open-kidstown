@@ -83,7 +83,7 @@ export function App(): ReactNode {
                         {s.profile?.note && <p>{s.profile.note}</p>}
                         <p style={{textAlign: 'right', marginTop: 8}}>
                             <button
-                                className="kt-btn kt-btn-danger"
+                                className="kt-btn kt-btn-danger kt-btn-sm"
                                 onClick={e => { e.stopPropagation(); setDeleting(s); }}
                             >削除…</button>
                         </p>

@@ -88,6 +88,7 @@ button { font-family: inherit; }
 .kt-btn-ghost { background: transparent; border-color: rgba(255,255,255,.5); color: #fff; }
 .kt-btn-ghost:hover { background: rgba(255,255,255,.15); }
 .kt-btn:disabled { opacity: .5; cursor: default; }
+.kt-btn-sm { padding: 2px 8px; font-size: 11px; border-radius: 6px; }
 
 .kt-toolbar {
     display: flex;
