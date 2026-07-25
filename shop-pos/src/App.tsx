@@ -6,6 +6,7 @@ import {
     type ShopProfile
 } from '@kidstown/shared';
 import {ShopView} from './ShopView';
+import {inspectShop, deleteShop, type ShopInspection} from './ops';
 
 interface ShopListItem {
     id: string;
@@ -19,6 +20,7 @@ export function App(): ReactNode {
     const [loading, setLoading] = useState(false);
     const [selected, setSelected] = useState<ShopListItem | null>(null);
     const [adding, setAdding] = useState(false);
+    const [deleting, setDeleting] = useState<ShopListItem | null>(null);
 
     const reload = useCallback(async () => {
         setLoading(true);
@@ -79,9 +81,23 @@ export function App(): ReactNode {
                         <h3>{s.profile?.name ?? `(マスタ未登録)`}</h3>
                         <p>店舗ID: {s.id}</p>
                         {s.profile?.note && <p>{s.profile.note}</p>}
+                        <p style={{textAlign: 'right', marginTop: 8}}>
+                            <button
+                                className="kt-btn kt-btn-danger"
+                                onClick={e => { e.stopPropagation(); setDeleting(s); }}
+                            >削除…</button>
+                        </p>
                     </div>
                 ))}
             </div>
+
+            {deleting && (
+                <DeleteShopModal
+                    shop={deleting}
+                    onClose={() => setDeleting(null)}
+                    onDone={async () => { setDeleting(null); await reload(); }}
+                />
+            )}
 
             {adding && (
                 <AddShopModal
@@ -91,6 +107,86 @@ export function App(): ReactNode {
                 />
             )}
         </AppShell>
+    );
+}
+
+interface DeleteShopModalProps {
+    shop: ShopListItem;
+    onClose: () => void;
+    onDone: () => Promise<void>;
+}
+
+function DeleteShopModal({shop, onClose, onDone}: DeleteShopModalProps): ReactNode {
+    const {client} = useTown();
+    const toast = useToast();
+    const [info, setInfo] = useState<ShopInspection | null>(null);
+    const [typed, setTyped] = useState('');
+    const [busy, setBusy] = useState(false);
+
+    useEffect(() => {
+        inspectShop(client, shop.id).then(setInfo).catch(err => {
+            toast(`確認に失敗しました: ${err instanceof Error ? err.message : err}`, 'error');
+        });
+    }, [client, shop.id, toast]);
+
+    // 取引や残高が残っている店は、店舗IDのタイプ入力を要求する
+    const heavy = info !== null && (info.txCount > 0 || (info.balance ?? 0) !== 0);
+    const ready = info !== null && (!heavy || typed.trim() === shop.id);
+
+    const run = async (): Promise<void> => {
+        setBusy(true);
+        try {
+            const r = await deleteShop(client, shop.id);
+            toast(`お店 ${shop.id} を削除しました (取引 ${r.txDeleted} 件 / 明細 ${r.ledgerDeleted} 件も削除)`, 'success');
+            await onDone();
+        } catch (err) {
+            toast(`削除に失敗しました: ${err instanceof Error ? err.message : err}。再実行で続きから回復できます`, 'error');
+            setBusy(false);
+        }
+    };
+
+    return (
+        <Modal
+            title={`お店 ${shop.id} の削除`}
+            onClose={onClose}
+            footer={
+                <>
+                    <button className="kt-btn" onClick={onClose} disabled={busy}>キャンセル</button>
+                    <button className="kt-btn kt-btn-danger" disabled={busy || !ready} onClick={() => void run()}>
+                        {busy ? '削除中…' : info === null ? '確認中…' : `お店 ${shop.id} を削除する`}
+                    </button>
+                </>
+            }
+        >
+            <div className="kt-form">
+                <p>
+                    {shop.profile?.name ? `「${shop.profile.name}」` : `店舗 ${shop.id}`} に関する
+                    データをすべて削除します。<b>元に戻せません。</b>
+                </p>
+                {info === null ? (
+                    <p className="kt-hint">データ量を確認しています…</p>
+                ) : (
+                    <p className="kt-hint">
+                        消えるもの: 店舗マスタ / 店舗口座
+                        (残高 {info.balance === null ? '未開設' : `${info.balance} えん`}) /
+                        取引 {info.txCount} 件 / 明細 {info.ledgerCount} 件 / 採番カウンタ
+                    </p>
+                )}
+                {heavy && (
+                    <>
+                        <p style={{color: '#c53030', margin: 0}}>
+                            取引または残高が残っています。登録直後の取り消しでない場合は、
+                            先に お店POS・ぎんこう Web で記録の確認 (CSV 出力) をおすすめします。
+                        </p>
+                        <label>
+                            確認のため店舗ID「{shop.id}」を入力してください
+                            <input autoFocus value={typed} disabled={busy}
+                                placeholder={shop.id} onChange={e => setTyped(e.target.value)} />
+                        </label>
+                    </>
+                )}
+            </div>
+        </Modal>
     );
 }
 
