@@ -115,3 +115,44 @@ export async function deleteCitizen(client: NbClient, profile: CitizenProfile): 
 export function emptyProfile(no = ''): CitizenProfile {
     return {no, idm: '', registered: dateToday(), status: 'active', note: ''};
 }
+
+export interface BulkGrantTarget {
+    no: string;
+    idm: string;
+}
+
+export interface BulkGrantResult {
+    ok: number;
+    failed: {no: string; message: string}[];
+}
+
+/**
+ * 一斉お祝い金: 対象市民の口座へ順番に加算 + grant 明細を記帳する。
+ * 1 人ずつ順次実行 (Scratch 側 onSnapshot への負荷配慮)。
+ * 個別の失敗はスキップして続行し、失敗一覧を返す (成功済みへの二重送金を
+ * 避けるため、失敗分は kids-bank の残高訂正等で個別に対応する)。
+ */
+export async function bulkGrant(
+    client: NbClient,
+    targets: BulkGrantTarget[],
+    amount: number,
+    memo: string,
+    progress: (done: number, total: number) => void
+): Promise<BulkGrantResult> {
+    let ok = 0;
+    const failed: BulkGrantResult['failed'] = [];
+    for (const t of targets) {
+        try {
+            const balance = await client.change(KT.BALANCE, t.idm, amount);
+            await writeLedger(client, t.idm, {
+                t: tsNow(), type: 'grant', amount, balance,
+                peer: 'cityhall', memo
+            });
+            ok++;
+        } catch (err) {
+            failed.push({no: t.no, message: err instanceof Error ? err.message : String(err)});
+        }
+        progress(ok + failed.length, targets.length);
+    }
+    return {ok, failed};
+}

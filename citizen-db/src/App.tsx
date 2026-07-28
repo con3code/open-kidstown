@@ -8,7 +8,7 @@ import {
 } from '@kidstown/shared';
 import {
     allocateCitizenNo, saveProfile, registerCitizen, bindCard,
-    reassignIdm, deleteCitizen, emptyProfile
+    reassignIdm, deleteCitizen, emptyProfile, bulkGrant, type BulkGrantTarget
 } from './ops';
 
 const STATUS_BADGE: Record<CitizenStatus, string> = {
@@ -31,6 +31,7 @@ export function App(): ReactNode {
     const [editing, setEditing] = useState<CitizenProfile | null>(null);
     const [isNew, setIsNew] = useState(false);
     const [reassignTarget, setReassignTarget] = useState<CitizenProfile | null>(null);
+    const [granting, setGranting] = useState(false);
 
     const reload = useCallback(async () => {
         setLoading(true);
@@ -198,6 +199,7 @@ export function App(): ReactNode {
                         }}
                     />
                 </label>
+                <button className="kt-btn" onClick={() => setGranting(true)}>一斉お祝い金…</button>
                 <button className="kt-btn kt-btn-primary" onClick={() => void startAdd()}>+ 市民登録</button>
             </div>
 
@@ -244,7 +246,108 @@ export function App(): ReactNode {
                     onDone={async () => { setReassignTarget(null); await reload(); }}
                 />
             )}
+
+            {granting && (
+                <BulkGrantModal
+                    citizens={citizens}
+                    onClose={() => setGranting(false)}
+                    onDone={async () => { setGranting(false); await reload(); }}
+                />
+            )}
         </AppShell>
+    );
+}
+
+interface BulkGrantModalProps {
+    citizens: CitizenProfile[];
+    onClose: () => void;
+    onDone: () => Promise<void>;
+}
+
+function BulkGrantModal({citizens, onClose, onDone}: BulkGrantModalProps): ReactNode {
+    const {client} = useTown();
+    const toast = useToast();
+    const [amount, setAmount] = useState('100');
+    const [memo, setMemo] = useState('お祝い金(一斉)');
+    const [busy, setBusy] = useState(false);
+    const [progress, setProgress] = useState({done: 0, total: 0});
+    const [failed, setFailed] = useState<{no: string; message: string}[]>([]);
+
+    // 対象: 有効 (active) かつカード発行済みの市民
+    const targets: BulkGrantTarget[] = citizens
+        .filter(c => c.status === 'active' && c.idm !== '')
+        .map(c => ({no: c.no, idm: c.idm}));
+    const excluded = citizens.length - targets.length;
+
+    const amountNum = Number(amount);
+    const valid = Number.isFinite(amountNum) && amountNum > 0 && targets.length > 0;
+
+    const run = async (): Promise<void> => {
+        setBusy(true);
+        setFailed([]);
+        setProgress({done: 0, total: targets.length});
+        try {
+            const r = await bulkGrant(client, targets, amountNum, memo.trim() || 'お祝い金',
+                (done, total) => setProgress({done, total}));
+            if (r.failed.length === 0) {
+                toast(`${r.ok} 人に ${amountNum} えんずつ送金しました`, 'success');
+                await onDone();
+            } else {
+                setFailed(r.failed);
+                toast(`${r.ok} 人に送金、${r.failed.length} 人に失敗しました。失敗した市民は再実行せず個別に対応してください`, 'error');
+                setBusy(false);
+            }
+        } catch (err) {
+            toast(`送金に失敗しました: ${err instanceof Error ? err.message : err}`, 'error');
+            setBusy(false);
+        }
+    };
+
+    return (
+        <Modal
+            title="一斉お祝い金"
+            onClose={onClose}
+            footer={
+                <>
+                    <button className="kt-btn" onClick={onClose} disabled={busy}>
+                        {failed.length > 0 ? '閉じる' : 'キャンセル'}
+                    </button>
+                    <button className="kt-btn kt-btn-primary" disabled={busy || !valid || failed.length > 0}
+                        onClick={() => void run()}>
+                        {busy
+                            ? `送金中… ${progress.done}/${progress.total}`
+                            : `${targets.length} 人に ${valid ? amountNum : '?'} えんずつ送金`}
+                    </button>
+                </>
+            }
+        >
+            <div className="kt-form">
+                <p className="kt-hint">
+                    対象: <b>{targets.length} 人</b>(有効でカード発行済みの市民)
+                    {excluded > 0 && ` — 未発行・停止・抹消の ${excluded} 人は対象外`}。
+                    1 人ずつ順番に「残高へ加算 + お祝い金明細の記帳」を行います。
+                </p>
+                <label>
+                    1 人あたりの金額
+                    <input type="number" min="1" autoFocus value={amount} disabled={busy}
+                        onChange={e => setAmount(e.target.value)} />
+                </label>
+                <label>
+                    明細に残すメモ
+                    <input value={memo} disabled={busy} onChange={e => setMemo(e.target.value)} />
+                </label>
+                {failed.length > 0 && (
+                    <div>
+                        <p style={{color: '#c53030', marginBottom: 4}}>
+                            送金できなかった市民(kids-bank Web の残高訂正等で個別対応してください):
+                        </p>
+                        <ul style={{margin: 0, paddingLeft: 20, fontSize: 13}}>
+                            {failed.map(f => <li key={f.no}>市民 {f.no}: {f.message}</li>)}
+                        </ul>
+                    </div>
+                )}
+            </div>
+        </Modal>
     );
 }
 
